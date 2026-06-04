@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Farm Water Recycling Calculator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #1D9E75; --green-light: #E1F5EE; --green-dark: #0F6E56;
+  --blue: #185FA5; --amber: #BA7517; --red: #A32D2D;
+  --bg: #f7f8f6; --card: #ffffff; --border: #dde3db;
+  --text: #1a1f18; --muted: #5a6458; --subtle: #8a9488;
+  --radius: 10px; --shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; }
+.app { display: grid; grid-template-columns: 1fr 370px; min-height: 100vh; }
+.main { padding: 18px; display: flex; flex-direction: column; gap: 13px; }
+.sidebar { background: var(--card); border-left: 1px solid var(--border);
+  padding: 18px; display: flex; flex-direction: column; gap: 13px; overflow-y: auto; }
+.app-header { display: flex; align-items: center; gap: 12px; }
+.app-header .logo { width: 40px; height: 40px; background: var(--green); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.app-header h1 { font-size: 17px; font-weight: 600; line-height: 1.2; }
+.app-header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 15px; box-shadow: var(--shadow); }
+.card-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 11px; }
+.row { display: flex; gap: 8px; align-items: center; }
+input[type=text], input[type=number], select {
+  flex: 1; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 7px; background: #fff; color: var(--text); outline: none; }
+input:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgba(29,158,117,0.15); }
+.btn { font-size: 13px; padding: 8px 14px; border-radius: 7px; border: 1px solid var(--border);
+  background: #fff; color: var(--text); cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px; font-weight: 500; transition: all 0.15s; }
+.btn:hover { background: var(--bg); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+.btn.primary:hover { background: var(--green-dark); }
+.btn.active { background: var(--green-light); border-color: var(--green); color: var(--green-dark); }
+.toolbar { display: flex; gap: 7px; flex-wrap: wrap; }
+#map { width: 100%; height: 400px; border-radius: var(--radius); border: 1px solid var(--border); z-index: 0; }
+.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; }
+.metric { background: var(--bg); border-radius: 8px; padding: 11px 13px; border: 1px solid var(--border); }
+.metric label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px; font-weight: 500; }
+.metric .val { font-size: 20px; font-weight: 600; color: var(--text); }
+.metric .unit { font-size: 10px; color: var(--subtle); margin-top: 1px; }
+.metric.highlight { background: var(--green-light); border-color: #9ed9c5; }
+.metric.highlight .val { color: var(--green-dark); }
+.status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; min-height: 20px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--subtle); flex-shrink: 0; }
+.dot.green { background: var(--green); }
+.dot.amber { background: var(--amber); }
+.dot.blue { background: var(--blue); }
+.dot.spin { animation: spin 1s linear infinite; background: none;
+  border: 2px solid var(--blue); border-top-color: transparent; border-radius: 50%; width: 10px; height: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.water-co-select { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.water-co-select label { font-size: 13px; color: var(--muted); white-space: nowrap; min-width: 110px; }
+.rate-display { font-size: 13px; font-weight: 600; color: var(--green-dark); background: var(--green-light);
+  border: 1px solid #9ed9c5; border-radius: 6px; padding: 5px 10px; white-space: nowrap; }
+.farm-list { display: flex; flex-direction: column; gap: 8px; }
+.farm-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 13px; position: relative; }
+.farm-item-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.farm-item-detail { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.farm-item-saving { font-size: 14px; font-weight: 700; color: var(--green-dark); margin-top: 4px; }
+.farm-item-del { position: absolute; top: 7px; right: 7px; background: none; border: none;
+  cursor: pointer; color: var(--subtle); font-size: 17px; padding: 2px 5px; border-radius: 4px; line-height: 1; }
+.farm-item-del:hover { color: var(--red); background: #fef2f2; }
+.farm-item-fly { position: absolute; bottom: 9px; right: 9px; font-size: 11px;
+  color: var(--blue); cursor: pointer; background: none; border: none; padding: 2px 5px; border-radius: 4px; }
+.farm-item-fly:hover { background: #e8f0fc; }
+.empty-state { text-align: center; padding: 22px 14px; color: var(--subtle); font-size: 12px; line-height: 1.6; }
+.empty-state .icon { font-size: 30px; display: block; margin-bottom: 8px; }
+.totals-box { background: var(--green-light); border: 1px solid #9ed9c5; border-radius: 8px; padding: 13px; }
+.totals-box h3 { font-size: 11px; font-weight: 700; color: var(--green-dark); text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 9px; }
+.total-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--green-dark); padding: 2px 0; }
+.total-row.big { font-size: 15px; font-weight: 700; border-top: 1px solid #9ed9c5; margin-top: 5px; padding-top: 7px; }
+.source-note { font-size: 11px; color: var(--subtle); line-height: 1.6; padding: 9px 12px;
+  background: var(--bg); border-radius: 7px; border: 1px solid var(--border); }
+.rainfall-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+  padding: 3px 8px; border-radius: 99px; background: var(--green-light); color: var(--green-dark);
+  border: 1px solid #9ed9c5; margin-top: 4px; }
+.rainfall-badge.est { background: #fff8e6; color: #7a5000; border-color: #f0d080; }
+.sidebar-header { display: flex; justify-content: space-between; align-items: center; }
+
+/* ── Print ── */
+@media print {
+  body { background: #fff; }
+  .app { display: none; }
+  #print-report { display: block !important; }
+}
+#print-report { display: none; }
+@page { margin: 18mm; size: A4; }
+.pr { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1f18; }
+.pr-header { display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 3px solid #1D9E75; padding-bottom: 14px; margin-bottom: 20px; }
+.pr-header h1 { font-size: 21px; font-weight: 700; color: #1D9E75; }
+.pr-header p { font-size: 11px; color: #5a6458; margin-top: 3px; }
+.pr-meta { text-align: right; font-size: 11px; color: #5a6458; }
+.pr-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
+.pr-stat { background: #f0faf6; border: 1px solid #9ed9c5; border-radius: 7px; padding: 12px; }
+.pr-stat label { font-size: 10px; color: #0F6E56; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; display: block; margin-bottom: 5px; }
+.pr-stat .val { font-size: 20px; font-weight: 700; color: #0F6E56; }
+.pr-stat .unit { font-size: 10px; color: #5a6458; }
+.pr h2 { font-size: 14px; font-weight: 600; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #dde3db; }
+.pr table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 24px; }
+.pr th { background: #1D9E75; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 10px; }
+.pr td { padding: 8px 10px; border-bottom: 1px solid #eef1ed; }
+.pr tr:nth-child(even) td { background: #f7faf6; }
+.pr .td-saving { font-weight: 700; color: #0F6E56; }
+.pr-formula { background: #f7faf6; border: 1px solid #dde3db; border-radius: 6px;
+  padding: 11px; font-size: 11px; color: #5a6458; margin-bottom: 24px; line-height: 1.7; }
+.pr-footer { border-top: 1px solid #dde3db; padding-top: 10px; font-size: 9.5px; color: #8a9488; line-height: 1.6; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { border-left: none; border-top: 1px solid var(--border); }
+  .metrics { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ═══ LEFT PANEL ═══ -->
+<div class="main">
+
+  <div class="app-header">
+    <div class="logo">💧</div>
+    <div>
+      <h1>Farm Water Recycling Calculator</h1>
+      <p>Draw roof polygons · Met Office HadUK-Grid rainfall (live 12km data) · Local water company rates</p>
+    </div>
+  </div>
+
+  <!-- Postcode -->
+  <div class="card">
+    <div class="card-title">Find farm by postcode</div>
+    <div class="row">
+      <input type="text" id="pcInput" placeholder="e.g. TA4 2PX, EX15 3DQ, BA22 8JB" maxlength="8"/>
+      <button class="btn primary" id="goBtn" onclick="goPostcode();" >📍 Go</button>
+    </div>
+  </div>
+
+  <!-- Water company selector -->
+  <div class="card">
+    <div class="card-title">Water company &amp; rate</div>
+    <div class="water-co-select">
+      <label>Water company:</label>
+      <select id="waterCo" onchange="onWaterCoChange()" style="flex:1;">
+        <option value="">— Select your water company —</option>
+        <option value="anglian">Anglian Water</option>
+        <option value="dwrcymru">Dŵr Cymru / Welsh Water</option>
+        <option value="northumbrian">Northumbrian Water</option>
+        <option value="severntrent">Severn Trent Water</option>
+        <option value="southern">Southern Water</option>
+        <option value="southwest">South West Water</option>
+        <option value="thames">Thames Water</option>
+        <option value="unitedutilities">United Utilities</option>
+        <option value="wessex">Wessex Water</option>
+        <option value="yorkshire">Yorkshire Water</option>
+        <option value="affinity">Affinity Water</option>
+        <option value="scotwater">Scottish Water</option>
+        <option value="custom">Custom rate…</option>
+      </select>
+      <div class="rate-display" id="rateDisplay">£1.91 / m³</div>
+    </div>
+    <div id="customRateRow" style="display:none;margin-top:10px;">
+      <div class="row">
+        <label style="font-size:13px;color:var(--muted);min-width:130px;">Custom rate (£/m³):</label>
+        <input type="number" id="customRate" value="1.91" step="0.01" min="0" max="10"
+          style="max-width:100px;" oninput="recalcAll()"/>
+        <span style="font-size:12px;color:var(--muted);">Enter your actual rate from your water bill</span>
+      </div>
+    </div>
+    <div id="waterCoNote" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
+  </div>
+
+  <!-- Map -->
+  <div class="card" style="padding:12px;">
+    <div class="toolbar" style="margin-bottom:10px;">
+      <button class="btn" id="btnDraw" onclick="startDraw()">✏️ Draw roof</button>
+      <button class="btn" id="btnClear" onclick="clearDraft()">✕ Clear</button>
+      <button class="btn" id="btnLayer" onclick="toggleLayer()">🛰 Satellite view</button>
+    </div>
+    <div id="map"></div>
+    <div class="status" style="margin-top:8px;">
+      <div class="dot" id="sDot"></div>
+      <span id="sTxt">Enter a postcode above, then switch to satellite view and draw a roof outline.</span>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="card">
+    <div class="card-title">Current roof — live calculation</div>
+    <div class="metrics">
+      <div class="metric"><label>Roof area</label><div class="val" id="rArea">—</div><div class="unit">m²</div></div>
+      <div class="metric">
+        <label>Annual rainfall</label>
+        <div class="val" id="rRain">—</div>
+        <div class="unit">mm / year</div>
+        <div id="rainfallBadge"></div>
+      </div>
+      <div class="metric"><label>Collectable water</label><div class="val" id="rVol">—</div><div class="unit">m³ / year</div></div>
+      <div class="metric highlight"><label>Potential annual saving</label><div class="val" id="rSave">—</div><div class="unit" id="rSaveUnit">@ £1.91 / m³</div></div>
+    </div>
+  </div>
+
+  <!-- Save -->
+  <div class="card">
+    <div class="card-title">Save this farm / building</div>
+    <div class="row" style="margin-bottom:10px;">
+      <input type="text" id="farmName" placeholder="Farm or building name (e.g. Home Farm – Dutch Barn)"/>
+    </div>
+    <div class="row">
+      <button class="btn primary" onclick="saveFarm()">💾 Save to list</button>
+      <span id="saveMsg" style="font-size:12px;color:var(--green-dark);font-weight:600;"></span>
+    </div>
+  </div>
+
+  <div class="source-note">
+    <strong>Postcode lookup:</strong> postcodes.io (free UK postcode API, ONS data). Full postcodes resolve to exact lat/lng; outward codes to district centroid.
+    <strong>Rainfall:</strong> Requests live Met Office HadUK-Grid 12km resolution data from the ArcGIS hub (1991–2020 averages, Open Government Licence). Falls back to regional estimates if the API is unreachable.
+    <strong>Water rates:</strong> 2025/26 metered volumetric rates (water supply only) from published company tariff schedules. Actual bills also include standing charges and wastewater costs.
+    <strong>Formula:</strong> Roof area (m²) × Annual rainfall (m) × Water rate (£/m³) = Potential annual mains water saving.
+  </div>
+</div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2 style="font-size:15px;font-weight:600;">Saved farms</h2>
+    <button class="btn primary" onclick="printReport()" id="printBtn" style="font-size:12px;padding:6px 11px;" disabled>🖨 Print report</button>
+  </div>
+
+  <div class="totals-box" id="totalsBox" style="display:none;">
+    <h3>Portfolio totals</h3>
+    <div class="total-row"><span>Total roof area</span><span id="tArea">—</span></div>
+    <div class="total-row"><span>Total water collected</span><span id="tVol">—</span></div>
+    <div class="total-row big"><span>Total annual saving</span><span id="tSave">—</span></div>
+  </div>
+
+  <div class="farm-list" id="farmList">
+    <div class="empty-state">
+      <span class="icon">🌾</span>
+      Draw a roof polygon on the map, name it, and click Save. Add as many buildings as you like before printing the report.
+    </div>
+  </div>
+
+  <!-- Rainfall reference -->
+  <div class="card" style="margin-top:auto;">
+    <div class="card-title">Met Office HadUK-Grid — regional averages</div>
+    <table style="width:100%;font-size:11px;border-collapse:collapse;" id="rainRef"></table>
+  </div>
+
+  <!-- Water rate reference -->
+  <div class="card">
+    <div class="card-title">Water company rates 2025/26</div>
+    <table style="width:100%;font-size:11px;border-collapse:collapse;" id="rateRef"></table>
+    <div style="font-size:10px;color:var(--subtle);margin-top:6px;line-height:1.5;">
+      Metered volumetric supply rate only (£/m³). Excludes standing charges and wastewater. Source: company published tariff schedules 2025/26.
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ PRINT REPORT ═══ -->
+<div id="print-report">
+<div class="pr">
+  <div class="pr-header">
+    <div>
+      <h1>💧 Farm Water Recycling Report</h1>
+      <p>Potential annual mains water savings from rainwater harvesting</p>
+    </div>
+    <div class="pr-meta">
+      <div id="prDate"></div>
+      <div style="margin-top:4px;color:#1D9E75;font-weight:700;">Farm Water Recycling Calculator</div>
+    </div>
+  </div>
+
+  <div class="pr-summary">
+    <div class="pr-stat"><label>Sites analysed</label><div class="val" id="prCount">0</div><div class="unit">farms / buildings</div></div>
+    <div class="pr-stat"><label>Total roof area</label><div class="val" id="prArea">0</div><div class="unit">m²</div></div>
+    <div class="pr-stat"><label>Water collected</label><div class="val" id="prVol">0</div><div class="unit">m³ / year</div></div>
+    <div class="pr-stat"><label>Total annual saving</label><div class="val" id="prSave">£0</div><div class="unit">potential / year</div></div>
+  </div>
+
+  <div class="pr-formula">
+    <strong>Calculation:</strong> Roof area (m²) × Annual rainfall (m) × Local water rate (£/m³) = Potential annual mains water saving<br>
+    <strong>Rainfall data:</strong> Met Office HadUK-Grid 1991–2020 30-year regional averages (Open Government Licence). Live 12km resolution data requested per farm location.<br>
+    <strong>Water rates:</strong> 2025/26 published metered volumetric tariffs (supply only). Excludes standing charges, wastewater and surface water drainage.
+  </div>
+
+  <h2>Farm-by-farm breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Farm / Building</th>
+        <th>Water company</th>
+        <th>Rainfall region</th>
+        <th style="text-align:right;">Rainfall mm/yr</th>
+        <th style="text-align:right;">Roof area m²</th>
+        <th style="text-align:right;">Water m³/yr</th>
+        <th style="text-align:right;">Rate £/m³</th>
+        <th style="text-align:right;">Annual saving</th>
+      </tr>
+    </thead>
+    <tbody id="prTable"></tbody>
+    <tfoot id="prFoot"></tfoot>
+  </table>
+
+  <div class="pr-footer">
+    <strong>Disclaimer:</strong> These figures are indicative estimates. Actual savings depend on local conditions, roof material and pitch, collection system efficiency (typically 85–90%), and current water tariffs.
+    Rainwater harvesting systems typically cost £2,000–£15,000 installed depending on storage capacity. We recommend consulting a water harvesting specialist before installation.
+    Rainfall: Met Office HadUK-Grid © Crown Copyright (Open Government Licence). Water rates: published company tariff schedules 2025/26.
+  </div>
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script>
+
+// ═══════════════════════════════════
+// WATER COMPANY RATES (2025/26)
+// Source: published metered volumetric tariff schedules
+// Water supply rate only (£/m³), excl. standing charges & wastewater
+// ═══════════════════════════════════
+const WATER_COS = {
+  anglian:       { name:'Anglian Water',           rate: 1.52, region:'East England' },
+  dwrcymru:      { name:'Dŵr Cymru / Welsh Water', rate: 1.62, region:'Wales' },
+  northumbrian:  { name:'Northumbrian Water',       rate: 1.28, region:'North East England' },
+  severntrent:   { name:'Severn Trent Water',       rate: 1.55, region:'Midlands' },
+  southern:      { name:'Southern Water',           rate: 1.98, region:'South East England' },
+  southwest:     { name:'South West Water',         rate: 2.27, region:'SW England' },
+  thames:        { name:'Thames Water',             rate: 2.08, region:'London / SE England' },
+  unitedutilities:{ name:'United Utilities',        rate: 1.71, region:'NW England' },
+  wessex:        { name:'Wessex Water',             rate: 1.89, region:'South England' },
+  yorkshire:     { name:'Yorkshire Water',          rate: 1.61, region:'Yorkshire' },
+  affinity:      { name:'Affinity Water',           rate: 1.44, region:'Home Counties' },
+  scotwater:     { name:'Scottish Water',           rate: 1.39, region:'Scotland' },
+  custom:        { name:'Custom rate',              rate: 1.91, region:'' },
+};
+
+// ═══════════════════════════════════
+// POSTCODE → LAT/LNG (full outward code table)
+// ═══════════════════════════════════
+// All UK postcode AREAS (letter prefix) → approximate centroid
+const PC_AREA = {
+  AB:[57.15,-2.11],AL:[51.76,-0.34],B:[52.48,-1.90],BA:[51.38,-2.36],BB:[53.75,-2.48],
+  BD:[53.80,-1.75],BH:[50.74,-1.90],BL:[53.58,-2.43],BN:[50.83,-0.14],BR:[51.38,0.01],
+  BS:[51.46,-2.60],CA:[54.90,-2.94],CB:[52.21,0.12],CF:[51.48,-3.18],CH:[53.19,-2.89],
+  CM:[51.74,0.47],CO:[51.89,0.90],CR:[51.37,-0.10],CT:[51.28,1.08],CV:[52.41,-1.51],
+  CW:[53.07,-2.44],DA:[51.44,0.22],DD:[56.46,-2.97],DE:[52.92,-1.48],DG:[55.07,-3.61],
+  DH:[54.78,-1.57],DL:[54.52,-1.56],DN:[53.52,-1.13],DT:[50.71,-2.44],DY:[52.51,-2.08],
+  E:[51.52,-0.03],EC:[51.52,-0.10],EH:[55.95,-3.19],EN:[51.65,-0.08],EX:[50.73,-3.53],
+  FK:[56.12,-3.93],FY:[53.84,-3.05],G:[55.86,-4.25],GL:[51.86,-2.24],GU:[51.24,-0.57],
+  HA:[51.58,-0.34],HD:[53.64,-1.78],HG:[53.99,-1.54],HP:[51.75,-0.74],HR:[52.06,-2.72],
+  HU:[53.74,-0.33],HX:[53.72,-1.86],IG:[51.56,0.08],IP:[52.06,1.16],IV:[57.47,-4.23],
+  JE:[49.21,-2.13],KA:[55.61,-4.50],KT:[51.37,-0.31],KW:[58.44,-3.10],KY:[56.20,-3.15],
+  L:[53.41,-2.98],LA:[54.05,-2.80],LD:[52.25,-3.38],LE:[52.63,-1.13],LL:[52.80,-3.95],
+  LN:[53.23,-0.54],LS:[53.80,-1.55],LU:[51.88,-0.42],M:[53.48,-2.24],ME:[51.40,0.52],
+  MK:[52.04,-0.76],ML:[55.77,-3.97],N:[51.55,-0.10],NE:[54.97,-1.61],NG:[52.95,-1.15],
+  NN:[52.24,-0.90],NP:[51.59,-2.98],NR:[52.63,1.30],NW:[51.54,-0.17],OL:[53.54,-2.11],
+  OX:[51.75,-1.26],PA:[55.84,-4.55],PE:[52.57,-0.24],PH:[56.40,-3.87],PL:[50.37,-4.14],
+  PO:[50.82,-1.09],PR:[53.76,-2.70],RG:[51.40,-1.05],RH:[51.24,-0.20],RM:[51.58,0.20],
+  S:[53.38,-1.47],SA:[51.62,-3.95],SE:[51.48,-0.06],SG:[51.92,-0.22],SK:[53.41,-2.16],
+  SL:[51.51,-0.60],SM:[51.40,-0.19],SN:[51.56,-1.78],SO:[50.90,-1.40],SP:[51.07,-1.79],
+  SR:[54.90,-1.38],SS:[51.57,0.71],ST:[52.99,-2.12],SW:[51.47,-0.18],SY:[52.71,-2.75],
+  TA:[51.02,-3.10],TD:[55.60,-2.48],TF:[52.70,-2.48],TN:[51.13,0.27],TQ:[50.46,-3.53],
+  TR:[50.26,-5.05],TS:[54.57,-1.23],TW:[51.44,-0.34],UB:[51.53,-0.48],W:[51.51,-0.21],
+  WA:[53.39,-2.59],WC:[51.52,-0.12],WD:[51.65,-0.42],WF:[53.68,-1.50],WN:[53.54,-2.63],
+  WR:[52.19,-2.22],WS:[52.58,-2.00],WV:[52.59,-2.13],YO:[53.96,-1.09],ZE:[60.15,-1.15]
+};
+
+// Specific outward codes for common farm areas (more precise than area centroid)
+const PC_OUTWARD = {
+  'TA1':[51.01,-3.10],'TA2':[51.03,-3.07],'TA3':[51.00,-2.97],'TA4':[51.07,-3.28],
+  'TA5':[51.12,-3.05],'TA6':[51.13,-2.98],'TA7':[51.13,-2.84],'TA8':[51.22,-2.97],
+  'TA9':[51.23,-2.93],'TA10':[51.02,-2.82],'TA11':[51.06,-2.67],'TA12':[50.97,-2.72],
+  'TA13':[50.94,-2.78],'TA14':[50.94,-2.67],'TA15':[50.96,-2.63],'TA16':[50.95,-2.77],
+  'TA17':[50.90,-2.83],'TA18':[50.88,-2.78],'TA19':[50.93,-2.95],'TA20':[50.87,-3.07],
+  'TA21':[51.00,-3.23],'TA22':[51.07,-3.54],'TA23':[51.18,-3.47],'TA24':[51.21,-3.63],
+  'EX1':[50.73,-3.52],'EX2':[50.72,-3.52],'EX3':[50.68,-3.43],'EX4':[50.74,-3.52],
+  'EX5':[50.77,-3.44],'EX6':[50.66,-3.61],'EX7':[50.60,-3.46],'EX8':[50.62,-3.41],
+  'EX9':[50.63,-3.33],'EX10':[50.68,-3.27],'EX11':[50.74,-3.31],'EX12':[50.74,-3.07],
+  'EX13':[50.79,-2.99],'EX14':[50.80,-3.10],'EX15':[50.84,-3.31],'EX16':[50.91,-3.51],
+  'EX17':[50.83,-3.64],'EX18':[50.87,-3.83],'EX19':[50.87,-3.95],'EX20':[50.79,-3.99],
+  'EX21':[50.79,-4.11],'EX22':[50.73,-4.24],'EX23':[50.76,-4.48],'EX24':[50.73,-3.16],
+  'EX31':[51.08,-4.05],'EX32':[51.00,-3.93],'EX33':[51.10,-4.07],'EX34':[51.22,-4.12],
+  'EX35':[51.24,-3.83],'EX36':[51.05,-3.74],'EX37':[50.97,-3.88],'EX38':[50.92,-4.09],
+  'EX39':[50.98,-4.22],
+  'BA1':[51.38,-2.36],'BA2':[51.35,-2.37],'BA3':[51.29,-2.45],'BA4':[51.23,-2.53],
+  'BA5':[51.22,-2.64],'BA6':[51.19,-2.69],'BA7':[51.14,-2.53],'BA8':[50.99,-2.49],
+  'BA9':[51.10,-2.50],'BA10':[51.15,-2.44],'BA11':[51.23,-2.34],'BA12':[51.20,-2.20],
+  'BA13':[51.27,-2.20],'BA14':[51.30,-2.21],'BA15':[51.37,-2.28],'BA16':[51.09,-2.72],
+  'BA20':[50.94,-2.63],'BA21':[50.93,-2.63],'BA22':[51.00,-2.66],
+  'SY1':[52.71,-2.75],'SY2':[52.70,-2.74],'SY3':[52.71,-2.77],'SY4':[52.80,-2.75],
+  'SY5':[52.62,-2.79],'SY6':[52.62,-2.89],'SY7':[52.50,-2.97],'SY8':[52.37,-2.74],
+  'SY9':[52.47,-3.12],'SY10':[52.86,-3.16],'SY11':[52.87,-3.06],'SY12':[52.94,-2.98],
+  'SY13':[52.97,-2.87],'SY14':[53.01,-2.76],'SY15':[52.57,-3.28],'SY16':[52.53,-3.38],
+  'SY17':[52.52,-3.59],'SY18':[52.52,-3.69],'SY19':[52.58,-3.87],'SY20':[52.62,-3.89],
+  'SY21':[52.65,-3.14],'SY22':[52.74,-3.26],'SY23':[52.40,-4.07],'SY24':[52.49,-4.04],
+  'SY25':[52.26,-3.96],
+};
+
+function localPostcodeLookup(raw) {
+  const pc = raw.toUpperCase().replace(/\s+/g,'');
+  // extract outward code e.g. "TA42PX" -> try "TA4", "TA42", etc.
+  const m = pc.match(/^([A-Z]{1,2}\d{1,2}[A-Z]?)/);
+  if (!m) return null;
+  const outward = m[1]; // e.g. "TA4"
+  // try specific outward table first
+  if (PC_OUTWARD[outward]) return { lat: PC_OUTWARD[outward][0], lng: PC_OUTWARD[outward][1] };
+  // try progressively shorter prefixes: TA42->TA4->TA
+  for (let len = outward.length - 1; len >= 1; len--) {
+    const sub = outward.slice(0, len);
+    if (PC_OUTWARD[sub]) return { lat: PC_OUTWARD[sub][0], lng: PC_OUTWARD[sub][1] };
+  }
+  // fall back to area code (letters only)
+  const areaM = outward.match(/^([A-Z]{1,2})/);
+  if (areaM && PC_AREA[areaM[1]]) return { lat: PC_AREA[areaM[1]][0], lng: PC_AREA[areaM[1]][1] };
+  return null;
+}
+
+// ═══════════════════════════════════
+// RAINFALL — Met Office HadUK-Grid 12km via ArcGIS
+// ═══════════════════════════════════
+// Regional fallback (HadUK-Grid 1991-2020 averages)
+const RAIN_REGIONS = [
+  {n:"NW Scotland",    mm:2100, b:[[57.5,-7.6],[58.7,-4.0]]},
+  {n:"W Highlands",    mm:1900, b:[[56.4,-6.0],[57.5,-4.5]]},
+  {n:"W Scotland",     mm:1600, b:[[55.5,-5.5],[56.5,-3.5]]},
+  {n:"NE Scotland",    mm:800,  b:[[56.5,-3.5],[57.7,-2.0]]},
+  {n:"E Scotland",     mm:720,  b:[[55.8,-3.5],[56.5,-2.0]]},
+  {n:"C Scotland",     mm:1100, b:[[55.7,-4.5],[56.5,-3.5]]},
+  {n:"SW Scotland",    mm:1400, b:[[54.6,-5.5],[55.5,-3.5]]},
+  {n:"N Ireland",      mm:1050, b:[[54.0,-8.2],[55.3,-5.4]]},
+  {n:"Lake District",  mm:2000, b:[[54.3,-3.5],[54.8,-2.8]]},
+  {n:"NW England",     mm:1050, b:[[53.3,-3.3],[54.5,-2.3]]},
+  {n:"NE England",     mm:680,  b:[[54.5,-2.3],[55.8,-1.0]]},
+  {n:"Yorkshire",      mm:720,  b:[[53.3,-2.3],[54.5,-0.5]]},
+  {n:"W Wales",        mm:1400, b:[[51.5,-5.3],[53.5,-3.5]]},
+  {n:"E Wales",        mm:950,  b:[[51.5,-3.5],[53.0,-2.7]]},
+  {n:"Midlands",       mm:700,  b:[[52.0,-2.5],[53.3, 0.0]]},
+  {n:"E England",      mm:590,  b:[[51.5,-0.5],[53.5, 2.0]]},
+  {n:"SW England",     mm:1050, b:[[50.0,-5.7],[51.4,-2.0]]},
+  {n:"S England",      mm:750,  b:[[50.5,-2.0],[51.5, 0.5]]},
+  {n:"SE England",     mm:680,  b:[[51.0,-0.5],[51.9, 1.5]]},
+  {n:"London",         mm:620,  b:[[51.3,-0.5],[51.7, 0.3]]},
+  {n:"E Anglia",       mm:580,  b:[[51.5, 0.3],[53.0, 2.0]]},
+];
+
+function getRegionRain(lat, lng) {
+  let best = null, bestArea = Infinity;
+  for (const r of RAIN_REGIONS) {
+    const [[s,w],[n,e]] = r.b;
+    if (lat>=s && lat<=n && lng>=w && lng<=e) {
+      const a = (n-s)*(e-w);
+      if (a < bestArea) { bestArea = a; best = r; }
+    }
+  }
+  if (best) return best;
+  if (lat > 57) return {n:"N Scotland", mm:1400};
+  if (lat > 55) return {n:"Scotland", mm:1000};
+  if (lat > 53.5) return {n:"N England", mm:800};
+  if (lat > 52) return {n:"Midlands", mm:700};
+  return {n:"S England", mm:700};
+}
+
+// Try to fetch from Met Office ArcGIS 12km annual precipitation layer
+// Dataset: Annual Precipitation Observations 1991-2020 12km (HadUK-Grid)
+async function fetchLiveRainfall(lat, lng) {
+  // Try multiple known ArcGIS layer IDs from the Met Office hub
+  const endpoints = [
+    // Annual precipitation 1991-2020 12km feature service candidates
+    `https://services1.arcgis.com/z6FNQZ9UQWA4Kzma/arcgis/rest/services/Annual_Precipitation_Observations_1991_2020/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&f=json&resultRecordCount=1`,
+    `https://services.arcgis.com/JJzESW51TqeY9uat/arcgis/rest/services/UK_Annual_Average_Rainfall_1991_2020/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=*&f=json&resultRecordCount=1`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.features && data.features.length > 0) {
+        const attrs = data.features[0].attributes || data.features[0].properties;
+        // Look for annual rainfall field
+        const keys = Object.keys(attrs);
+        const annualKey = keys.find(k => {
+          const kl = k.toLowerCase();
+          return (kl.includes('annual') || kl.includes('ann') || kl === 'rainfall' || kl.includes('precip') || kl.includes('rain'))
+            && !kl.includes('days') && !kl.includes('count');
+        }) || keys.find(k => {
+          const v = attrs[k];
+          return typeof v === 'number' && v > 200 && v < 4000;
+        });
+        if (annualKey && attrs[annualKey] && attrs[annualKey] > 100) {
+          return { mm: Math.round(attrs[annualKey]), region: '12km grid', live: true };
+        }
+      }
+    } catch (e) { /* try next */ }
+  }
+  return null; // signal fallback needed
+}
+
+// ═══════════════════════════════════
+// MAP
+// ═══════════════════════════════════
+const map = L.map('map', { center:[54.0,-2.5], zoom:6 });
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap contributors', maxZoom:20 });
+const sat = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution:'© Esri, DigitalGlobe, GeoEye', maxZoom:20 });
+let isSat = false;
+osm.addTo(map);
+
+function toggleLayer() {
+  if (isSat) { map.removeLayer(sat); osm.addTo(map); isSat=false; document.getElementById('btnLayer').textContent='🛰 Satellite view'; }
+  else { map.removeLayer(osm); sat.addTo(map); isSat=true; document.getElementById('btnLayer').textContent='🗺 Street map'; }
+}
+
+const drawn = new L.FeatureGroup();
+map.addLayer(drawn);
+let dh = null;
+let currentData = null;
+
+function startDraw() {
+  clearDraft();
+  dh = new L.Draw.Polygon(map, {
+    shapeOptions:{ color:'#1D9E75', fillOpacity:0.25, weight:2 },
+    allowIntersection:false
+  });
+  dh.enable();
+  document.getElementById('btnDraw').classList.add('active');
+  setS('Click corners of the shed roof. Double-click to close.', 'blue');
+}
+
+function clearDraft() {
+  drawn.clearLayers();
+  if (dh) { dh.disable(); dh=null; }
+  document.getElementById('btnDraw').classList.remove('active');
+  ['rArea','rRain','rVol','rSave'].forEach(id => document.getElementById(id).textContent='—');
+  document.getElementById('rainfallBadge').innerHTML = '';
+  currentData = null;
+  document.getElementById('saveMsg').textContent = '';
+  setS('Draw a roof polygon to calculate savings.', '');
+}
+
+async function applyCalc(layer) {
+  const ll = layer.getLatLngs()[0];
+  const area = L.GeometryUtil.geodesicArea(ll);
+  const c = layer.getBounds().getCenter();
+  document.getElementById('rArea').textContent = Math.round(area).toLocaleString();
+  document.getElementById('rRain').textContent = '…';
+  document.getElementById('rainfallBadge').innerHTML = '<span class="rainfall-badge">⟳ Fetching live data…</span>';
+  setS('Fetching Met Office 12km rainfall data…', 'blue');
+
+  // Try live API
+  let rainResult = null;
+  let isLive = false;
+  try {
+    rainResult = await fetchLiveRainfall(c.lat, c.lng);
+  } catch(e) {}
+
+  if (rainResult && rainResult.live) {
+    isLive = true;
+  } else {
+    // Fallback to regional table
+    const reg = getRegionRain(c.lat, c.lng);
+    rainResult = { mm: reg.mm, region: reg.n, live: false };
+  }
+
+  const rate = getCurrentRate();
+  const vol = area * (rainResult.mm / 1000);
+  const save = vol * rate;
+
+  currentData = { area, rain: rainResult, vol, save, lat: c.lat, lng: c.lng, rate };
+
+  document.getElementById('rRain').textContent = rainResult.mm;
+  document.getElementById('rVol').textContent = Math.round(vol).toLocaleString();
+  document.getElementById('rSave').textContent = '£' + Math.round(save).toLocaleString();
+  updateSaveUnit();
+
+  const badge = isLive
+    ? `<span class="rainfall-badge">✓ Met Office 12km live</span>`
+    : `<span class="rainfall-badge est">~ ${rainResult.region} regional estimate</span>`;
+  document.getElementById('rainfallBadge').innerHTML = badge;
+
+  const src = isLive ? 'Met Office HadUK-Grid 12km (live)' : `Regional estimate — ${rainResult.region}`;
+  setS(`Rainfall: ${rainResult.mm}mm/yr · ${src}`, 'green');
+}
+
+map.on(L.Draw.Event.CREATED, e => { drawn.addLayer(e.layer); document.getElementById('btnDraw').classList.remove('active'); applyCalc(e.layer); });
+map.on(L.Draw.Event.EDITED, e => e.layers.eachLayer(l => applyCalc(l)));
+
+function setS(msg, col) {
+  document.getElementById('sTxt').textContent = msg;
+  const d = document.getElementById('sDot');
+  d.className = 'dot' + (col ? ' '+col : '');
+}
+
+// ═══════════════════════════════════
+// WATER COMPANY RATES
+// ═══════════════════════════════════
+const WATER_CO_NOTES = {
+  anglian: 'Serves East England (Cambridgeshire, Norfolk, Suffolk, Essex, Lincolnshire, Northamptonshire, Bedfordshire, Hertfordshire).',
+  dwrcymru: 'Serves most of Wales. Note: Welsh Water market is not deregulated for non-household customers under 50ML/year.',
+  northumbrian: 'Serves North East England (County Durham, Northumberland, Tyne & Wear, Teesside) and Essex & Suffolk.',
+  severntrent: 'Serves Midlands and parts of Wales (Staffordshire, Warwickshire, Worcestershire, Derbyshire, Nottinghamshire, Leicestershire, Gloucestershire).',
+  southern: 'Serves South East England (Kent, Sussex, Hampshire, Isle of Wight).',
+  southwest: 'Serves Cornwall, Devon, and parts of Somerset and Dorset. Highest rates in England due to dispersed population and coastline infrastructure.',
+  thames: 'Serves Greater London, Surrey, Berkshire, Buckinghamshire, Oxfordshire, Hertfordshire (eastern), Essex (western).',
+  unitedutilities: 'Serves North West England (Greater Manchester, Lancashire, Cheshire, Cumbria, Merseyside).',
+  wessex: 'Serves Dorset, Wiltshire (south), Somerset (south), and parts of Hampshire.',
+  yorkshire: 'Serves Yorkshire and the Humber.',
+  affinity: 'Serves parts of Hertfordshire, Bedfordshire, Surrey, Kent and the Thames Valley. Water supply only (no wastewater).',
+  scotwater: 'Scottish Water serves all of Scotland. Business market deregulated since 2008.',
+  custom: 'Enter your actual volumetric water rate from your bill (pence per litre × 1000, or £/m³).',
+};
+
+function onWaterCoChange() {
+  const sel = document.getElementById('waterCo').value;
+  const customRow = document.getElementById('customRateRow');
+  const noteEl = document.getElementById('waterCoNote');
+  customRow.style.display = sel === 'custom' ? 'block' : 'none';
+  if (sel && WATER_CO_NOTES[sel]) {
+    noteEl.textContent = WATER_CO_NOTES[sel];
+  } else {
+    noteEl.textContent = '';
+  }
+  updateRateDisplay();
+  recalcAll();
+}
+
+function getCurrentRate() {
+  const sel = document.getElementById('waterCo').value;
+  if (!sel) return 1.91;
+  if (sel === 'custom') return parseFloat(document.getElementById('customRate').value) || 1.91;
+  return WATER_COS[sel].rate;
+}
+
+function updateRateDisplay() {
+  const rate = getCurrentRate();
+  document.getElementById('rateDisplay').textContent = '£' + rate.toFixed(2) + ' / m³';
+}
+
+function updateSaveUnit() {
+  const rate = getCurrentRate();
+  const sel = document.getElementById('waterCo').value;
+  const name = sel && sel !== 'custom' ? WATER_COS[sel].name : 'Custom rate';
+  document.getElementById('rSaveUnit').textContent = `@ £${rate.toFixed(2)}/m³ (${name || 'default'})`;
+}
+
+function recalcAll() {
+  updateRateDisplay();
+  if (!currentData) return;
+  const rate = getCurrentRate();
+  const save = currentData.vol * rate;
+  currentData.save = save;
+  currentData.rate = rate;
+  document.getElementById('rSave').textContent = '£' + Math.round(save).toLocaleString();
+  updateSaveUnit();
+}
+
+// ═══════════════════════════════════
+// POSTCODE NAVIGATION — postcodes.io
+// ═══════════════════════════════════
+// Normalise input: strip spaces, uppercase
+function normalisePostcode(raw) {
+  return raw.toUpperCase().replace(/\s+/g, '').trim();
+}
+
+// Is it a full postcode (e.g. TA4 2PX) or just an outward code (e.g. TA4)?
+function isFullPostcode(pc) {
+  // Full UK postcode pattern: 1-2 letters, 1-2 digits (+optional letter), space?, 1 digit, 2 letters
+  return /^[A-Z]{1,2}\d{1,2}[A-Z]?\d[A-Z]{2}$/.test(pc);
+}
+
+function isOutwardCode(pc) {
+  return /^[A-Z]{1,2}\d{1,2}[A-Z]?$/.test(pc);
+}
+
+async function goPostcode() {
+  const raw = document.getElementById('pcInput').value.trim();
+  if (!raw) return;
+
+  const btn = document.getElementById('goBtn');
+  btn.textContent = '…'; btn.disabled = true;
+  setS('Looking up postcode…', 'blue');
+
+  const pc = normalisePostcode(raw);
+
+  try {
+    // 1. Full postcode → postcodes.io /postcodes/:postcode (exact lat/lng)
+    if (isFullPostcode(pc)) {
+      const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc)}`);
+      const json = await res.json();
+      if (json.status === 200 && json.result) {
+        const { latitude: lat, longitude: lng } = json.result;
+        map.setView([lat, lng], 18);
+        if (!isSat) toggleLayer();
+        setS('Navigated to ' + raw.toUpperCase() + ' (postcodes.io). Draw a roof polygon.', 'green');
+        return;
+      }
+      // Might be terminated — try /terminated_postcodes
+      const res2 = await fetch(`https://api.postcodes.io/terminated_postcodes/${encodeURIComponent(pc)}`);
+      const json2 = await res2.json();
+      if (json2.status === 200 && json2.result) {
+        const { latitude: lat, longitude: lng } = json2.result;
+        map.setView([lat, lng], 18);
+        if (!isSat) toggleLayer();
+        setS('Navigated to ' + raw.toUpperCase() + ' (terminated postcode). Draw a roof polygon.', 'amber');
+        return;
+      }
+    }
+
+    // 2. Outward code only → postcodes.io /outcodes/:outcode (centroid of district)
+    const outward = pc.match(/^([A-Z]{1,2}\d{1,2}[A-Z]?)/)?.[1] || pc;
+    if (isOutwardCode(outward)) {
+      const res = await fetch(`https://api.postcodes.io/outcodes/${encodeURIComponent(outward)}`);
+      const json = await res.json();
+      if (json.status === 200 && json.result) {
+        const { latitude: lat, longitude: lng } = json.result;
+        map.setView([lat, lng], 14);
+        if (!isSat) toggleLayer();
+        setS('Navigated to outward code ' + outward + ' (postcodes.io). Zoom in and draw a roof polygon.', 'green');
+        return;
+      }
+    }
+
+    // 3. Local lookup table as offline fallback
+    const local = localPostcodeLookup(raw);
+    if (local) {
+      map.setView([local.lat, local.lng], 14);
+      if (!isSat) toggleLayer();
+      setS('Navigated to ' + raw.toUpperCase() + ' (offline table). Draw a roof polygon.', 'amber');
+      return;
+    }
+
+    setS('Postcode "' + raw.toUpperCase() + '" not found. Check it and try again.', 'amber');
+
+  } catch (err) {
+    // Network error — try local table
+    const local = localPostcodeLookup(raw);
+    if (local) {
+      map.setView([local.lat, local.lng], 14);
+      if (!isSat) toggleLayer();
+      setS('Navigated using offline table (no internet). Draw a roof polygon.', 'amber');
+    } else {
+      setS('Could not reach postcodes.io — check internet connection or scroll the map manually.', 'amber');
+    }
+  } finally {
+    btn.textContent = '📍 Go'; btn.disabled = false;
+  }
+}
+
+document.getElementById('pcInput').addEventListener('keydown', e => { if (e.key === 'Enter') goPostcode(); });
+
+// ═══════════════════════════════════
+// FARM LIST
+// ═══════════════════════════════════
+let farms = [];
+
+function saveFarm() {
+  if (!currentData) { alert('Please draw a roof polygon first.'); return; }
+  const name = document.getElementById('farmName').value.trim() || ('Farm ' + (farms.length + 1));
+  const sel = document.getElementById('waterCo').value;
+  const coName = sel && sel !== 'custom' ? WATER_COS[sel].name : (sel === 'custom' ? 'Custom rate' : 'Default rate');
+  farms.push({
+    id: Date.now(), name,
+    area: Math.round(currentData.area),
+    rain: Math.round(currentData.rain.mm),
+    region: currentData.rain.region,
+    rainLive: currentData.rain.live,
+    vol: Math.round(currentData.vol),
+    save: Math.round(currentData.save),
+    rate: currentData.rate,
+    waterCo: coName,
+    lat: currentData.lat, lng: currentData.lng
+  });
+  document.getElementById('farmName').value = '';
+  document.getElementById('saveMsg').textContent = '✓ Saved!';
+  setTimeout(() => document.getElementById('saveMsg').textContent = '', 2500);
+  renderFarmList();
+  clearDraft();
+}
+
+function deleteFarm(id) {
+  farms = farms.filter(f => f.id !== id);
+  renderFarmList();
+}
+
+function flyTo(lat, lng) {
+  map.setView([lat, lng], 17);
+  if (!isSat) toggleLayer();
+}
+
+function renderFarmList() {
+  const el = document.getElementById('farmList');
+  const totBox = document.getElementById('totalsBox');
+  document.getElementById('printBtn').disabled = farms.length === 0;
+
+  if (farms.length === 0) {
+    el.innerHTML = '<div class="empty-state"><span class="icon">🌾</span>Draw a roof, name it, and click Save. Add as many farms and buildings as you like.</div>';
+    totBox.style.display = 'none';
+    return;
+  }
+
+  totBox.style.display = 'block';
+  const totalArea = farms.reduce((s,f) => s+f.area, 0);
+  const totalVol = farms.reduce((s,f) => s+f.vol, 0);
+  const totalSave = farms.reduce((s,f) => s+f.save, 0);
+  document.getElementById('tArea').textContent = totalArea.toLocaleString() + ' m²';
+  document.getElementById('tVol').textContent = totalVol.toLocaleString() + ' m³/yr';
+  document.getElementById('tSave').textContent = '£' + totalSave.toLocaleString() + '/yr';
+
+  el.innerHTML = farms.map(f => `
+    <div class="farm-item">
+      <button class="farm-item-del" onclick="deleteFarm(${f.id})" title="Remove">×</button>
+      <div class="farm-item-name">🌾 ${f.name}</div>
+      <div class="farm-item-detail">
+        ${f.waterCo} · £${f.rate.toFixed(2)}/m³<br>
+        ${f.region}${f.rainLive ? ' ✓' : ' ~'} ${f.rain}mm/yr · ${f.area.toLocaleString()} m²
+      </div>
+      <div class="farm-item-saving">£${f.save.toLocaleString()} / year</div>
+      <button class="farm-item-fly" onclick="flyTo(${f.lat},${f.lng})">📍 View on map</button>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════
+// PRINT REPORT
+// ═══════════════════════════════════
+function printReport() {
+  if (farms.length === 0) { alert('No farms saved yet.'); return; }
+  const totalArea = farms.reduce((s,f) => s+f.area, 0);
+  const totalVol = farms.reduce((s,f) => s+f.vol, 0);
+  const totalSave = farms.reduce((s,f) => s+f.save, 0);
+  document.getElementById('prDate').textContent = 'Generated: ' + new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('prCount').textContent = farms.length;
+  document.getElementById('prArea').textContent = totalArea.toLocaleString();
+  document.getElementById('prVol').textContent = totalVol.toLocaleString();
+  document.getElementById('prSave').textContent = '£' + totalSave.toLocaleString();
+  document.getElementById('prTable').innerHTML = farms.map(f => `
+    <tr>
+      <td><strong>${f.name}</strong></td>
+      <td>${f.waterCo}</td>
+      <td>${f.region}${f.rainLive ? ' ✓' : ' ~'}</td>
+      <td style="text-align:right;">${f.rain}</td>
+      <td style="text-align:right;">${f.area.toLocaleString()}</td>
+      <td style="text-align:right;">${f.vol.toLocaleString()}</td>
+      <td style="text-align:right;">£${f.rate.toFixed(2)}</td>
+      <td style="text-align:right;" class="td-saving">£${f.save.toLocaleString()}</td>
+    </tr>`).join('');
+  document.getElementById('prFoot').innerHTML = `
+    <tr style="background:#f0faf6;font-weight:700;">
+      <td colspan="4" style="padding:9px 10px;color:#0F6E56;border-top:2px solid #9ed9c5;">TOTAL</td>
+      <td style="padding:9px 10px;text-align:right;color:#0F6E56;border-top:2px solid #9ed9c5;">${totalArea.toLocaleString()} m²</td>
+      <td style="padding:9px 10px;text-align:right;color:#0F6E56;border-top:2px solid #9ed9c5;">${totalVol.toLocaleString()} m³</td>
+      <td style="border-top:2px solid #9ed9c5;"></td>
+      <td style="padding:9px 10px;text-align:right;color:#0F6E56;border-top:2px solid #9ed9c5;font-size:14px;">£${totalSave.toLocaleString()}</td>
+    </tr>`;
+  window.print();
+}
+
+// ═══════════════════════════════════
+// REFERENCE TABLES
+// ═══════════════════════════════════
+(function buildRainRef() {
+  const t = document.getElementById('rainRef');
+  t.innerHTML = '<thead><tr style="background:var(--bg);"><th style="text-align:left;padding:4px 6px;color:var(--muted);font-weight:600;font-size:11px;">Region</th><th style="text-align:right;padding:4px 6px;color:var(--muted);font-weight:600;font-size:11px;">mm/yr</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  RAIN_REGIONS.forEach((r,i) => {
+    const tr = document.createElement('tr');
+    tr.style.background = i%2===0 ? 'var(--bg)' : '';
+    tr.innerHTML = `<td style="padding:3px 6px;">${r.n}</td><td style="padding:3px 6px;text-align:right;color:var(--green-dark);font-weight:600;">${r.mm}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+})();
+
+(function buildRateRef() {
+  const t = document.getElementById('rateRef');
+  t.innerHTML = '<thead><tr style="background:var(--bg);"><th style="text-align:left;padding:4px 6px;color:var(--muted);font-weight:600;font-size:11px;">Company</th><th style="text-align:right;padding:4px 6px;color:var(--muted);font-weight:600;font-size:11px;">£/m³</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  Object.entries(WATER_COS).filter(([k]) => k !== 'custom').sort((a,b) => a[1].rate - b[1].rate).forEach(([k,v],i) => {
+    const tr = document.createElement('tr');
+    tr.style.background = i%2===0 ? 'var(--bg)' : '';
+    tr.innerHTML = `<td style="padding:3px 6px;">${v.name}</td><td style="padding:3px 6px;text-align:right;color:var(--green-dark);font-weight:600;">${v.rate.toFixed(2)}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+})();
+
+// Init
+renderFarmList();
+updateRateDisplay();
+
+</script>
+</body>
+</html>
